@@ -154,4 +154,152 @@ file.
 import TestSHACL
 import TestSHACL.Client
 ```
+
+## Define a query for an RDF shape
+
+Now let's reuse the same RDF description we have used in the last
+projects.
+
+```
+# priv/data/978-1-68050-252-7.ttl
+@prefix bibo: <http://purl.org/ontology/bibo/> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<urn:isbn:978-1-68050-252-7> a bibo:Book ;
+    dc:creator <https://twitter.com/bgmarx> ;
+    dc:creator <https://twitter.com/josevalim> ;
+    dc:creator <https://twitter.com/redrapids> ;
+    dc:date "2018-03-14"^^xsd:date ;
+    dc:format "Paper" ;
+    dc:publisher <https://pragprog.com/> ;
+    dc:title "Adopting Elixir"@en .
+```
+
+As before, we can define a simple `data/0` function to retrieve this RDF
+data from the file `978–1–68050–252–7.ttl` which we'll add to
+`priv/data/`.
+
+
+```elixir
+# lib/test_shacl/client.ex
+defmodule TestSHACL.Client do
+  @moduledoc """
+  This module provides test functions for the SPARQL.Client module.
+  """
+
+  @priv_dir "#{:code.priv_dir(:test_shacl)}"
+
+  @data_dir @priv_dir <> "/data/"
+  @data_file "978-1-68050-252-7.ttl"
+
+  @doc """
+  Reads default RDF model in Turtle format.
+  """
+  def data do
+    RDF.Turtle.read_file!(@data_dir <> @data_file)
+  end
+end
+```
+
+And let's try that.
+
+```bash
+bash> make all
+
+iex> data
+#=> #RDF.Graph{name: nil
+        ~I<urn:isbn:978-1-68050-252-7>
+            ~I<http://purl.org/dc/elements/1.1/creator>
+              ~I<https://twitter.com/bgmarx>
+              ~I<https://twitter.com/josevalim>
+              ~I<https://twitter.com/redrapids>
+            ~I<http://purl.org/dc/elements/1.1/date>
+            %RDF.Literal{value: ~D[2018-03-14],
+              datatype: ~I<http://www.w3.org/2001/XMLSchema#date>}
+            ~I<http://purl.org/dc/elements/1.1/format>
+              ~L"Paper"
+            ~I<http://purl.org/dc/elements/1.1/publisher>
+              ~I<https://pragprog.com/>
+            ~I<http://purl.org/dc/elements/1.1/title>
+              ~L"Adopting Elixir"en
+            ~I<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+              ~I<http://purl.org/ontology/bibo/Book>}
+
+iex> data |> RDF.Turtle.write_string! |> IO.puts
+#=> <urn:isbn:978-1-68050-252-7>
+        a <http://purl.org/ontology/bibo/Book> ;
+        <http://purl.org/dc/elements/1.1/creator>
+          <https://twitter.com/bgmarx>,
+          <https://twitter.com/josevalim>,
+          <https://twitter.com/redrapids> ;
+        <http://purl.org/dc/elements/1.1/date>
+          "2018-03-14"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        <http://purl.org/dc/elements/1.1/format> "Paper" ;
+        <http://purl.org/dc/elements/1.1/publisher> <https://pragprog.com/> ;
+        <http://purl.org/dc/elements/1.1/title> "Adopting Elixir"@en .
+    :ok
+```
+
+Looks good. No prefix forms here but it is a valid RDF description. So
+now to defining an RDF shape for this graph.
+
+The new W3C standard for RDF introduced last year, the Shapes Constraint
+Langauge (SHACL), has been a very significant development for RDF as it
+specifies a "language for describing and validating RDF graphs".
+While most attention is usually focused on the validation part, the
+really unique value proposition of SHACL is its formalization of RDF
+graph descriptions. Because, of course, before validating a graph one
+needs to be able to define it properly. And the fact that RDF shapes in
+SHACL are themselves modelled as RDF means that these graph descriptions
+ can be queried over in turn as native data constructs. This is powerful.
+This is very much the "code is data" paradigm.
+
+SHACL defines two basic types of shapes:
+
+* shapes about a focus node, called node shapes
+* shapes about the values of a particular property or path for the focus
+  node, called property shapes
+
+Our use case here is based on a node shape. The set of focus nodes for a
+node shape may be identified using target declarations via the
+`sh:targetClass` property. In this use case we have but one focus node
+which is identified with the `sh:targetClass` of `bibo:Book`.
+
+Now we can define a basic RDF shape for our book description as below.
+And for the purposes of this tutorial let's expressly comment out a
+couple properties: `dc:format` and `dc:publisher`. This leaves just
+`dc:creator`, `dc:date` and `dc:title`. Let's assume for whatever reason
+that we wish to limit our book descriptions to just title, author and
+date. (This example is admittedly more than a little contrived but it
+will serve our purposes here in defining a proper subgraph.)
+
+```
+# priv/shapes/book_shape.ttl
+@prefix bibo: <http://purl.org/ontology/bibo/> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+@prefix shapes: <http://example.org/shapes/> .
+
+# shape - Book
+
+shapes:Book
+    a sh:NodeShape ;
+    sh:targetClass bibo:Book ;
+    rdfs:label "SHACL shape for the bibo:Book model" ;
+    sh:closed true ;
+
+    sh:property [ sh:path dc:creator ] ;
+    sh:property [ sh:path dc:date ] ;
+    # sh:property [ sh:path dc:format ] ;
+    # sh:property [ sh:path dc:publisher ] ;
+    sh:property [ sh:path dc:title ] ;
+    .
+```
+
+
 ### 8 November 2018 by Oleg G.Kapranov

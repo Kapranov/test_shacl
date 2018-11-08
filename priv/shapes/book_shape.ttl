@@ -20,4 +20,4 @@ shapes:Book
     # sh:property [ sh:path dc:format ] ;
     # sh:property [ sh:path dc:publisher ] ;
     sh:property [ sh:path dc:title ] ;
-.
+    .
