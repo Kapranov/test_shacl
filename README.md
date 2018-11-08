@@ -34,6 +34,7 @@ notifier.
 use Mix.Config
 
 if Mix.env == :dev do
+  config :tesla, :adapter, Tesla.Adapter.Hackney
   config :mix_test_watch, clear: true
   config :remix, escript: true, silent: true
 end
@@ -86,7 +87,9 @@ defmodule TestSHACL.MixProject do
       {:credo, "~> 0.10.0", only: [:dev, :test], runtime: false},
       {:excoveralls, "~> 0.10.1", only: :test},
       {:ex_unit_notifier, "~> 0.1.4", only: :test},
+      {:hackney, "~> 1.14.3"},
       {:mix_test_watch, "~> 0.9.0", only: :dev, runtime: false},
+      {:sparql_client, "~> 0.2.1"},
       {:remix, "~> 0.0.2", only: :dev}
     ]
   end
@@ -97,5 +100,11 @@ end
 ```
 
 Run it code: `bash> make packs; make all`
+
+We'll then declare a dependency on `SPARQL.Client.ex` in the `mix.exs`
+file. And we'll also use the `hackney` HTTP client in Erlang as
+recommended. And we added this line to the `config.exs` file:
+`config :tesla, :adapter, Tesla.Adapter.Hackney`. We then use Mix to add
+in the dependency: `make packs`.
 
 ### 8 November 2018 by Oleg G.Kapranov
