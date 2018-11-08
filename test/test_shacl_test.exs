@@ -2,7 +2,7 @@ defmodule TestSHACLTest do
   use ExUnit.Case
   doctest TestSHACL
 
-  test "greets the world" do
-    assert TestSHACL.hello() == :world
+  test "the truth" do
+    assert 1 + 1 == 2
   end
 end
