@@ -107,4 +107,51 @@ recommended. And we added this line to the `config.exs` file:
 `config :tesla, :adapter, Tesla.Adapter.Hackney`. We then use Mix to add
 in the dependency: `make packs`.
 
+Let's also clear out the boilerplate in `lib/test_shacl.ex` and add in a
+`@moduledoc` annotation. And we'll also add a module attribute
+`@priv_dir` to locate our project artefacts directory `priv/`.
+
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  @priv_dir "#{:code.priv_dir(:test_shacl)}"
+end
+```
+
+We'll create a `lib/test_shacl/` directory for the client module we're
+going to add in the file `client.ex`.
+
+We'll also create the `priv/` directory tree.
+
+```bash
+bash> mkdir -p lib/test_shacl/
+bash> touch lib/test_shacl/client.ex
+bash> mkdir -p priv/data
+bash> mkdir -p priv/shapes
+bash> mkdir -p priv/shapes/queries
+bash> touch priv/data/978-1-68050-252-7.ttl
+bash> touch priv/shapes/book_shape.ttl
+bash> touch priv/shapes/queries/book_shape_query.rq
+bash> touch priv/shapes/queries/book_shape_query_helper.rq
+```
+
+And for testing let's also copy over the query convenience functions we
+defined in the previously project for the `TestQuery` and
+`TestQuery.Client` module. We'll copy `query/0`, `query/1` and `query/2`
+to the `TestSHACL` module, and `rquery/0`, `rquery/1` and `rquery/2` to
+the `TestSHACL.Client` module.
+
+And also to simplify naming in IEx we'll add a `.iex.exs` configuration
+file.
+
+```elixir
+# .iex.exs
+import TestSHACL
+import TestSHACL.Client
+```
 ### 8 November 2018 by Oleg G.Kapranov
