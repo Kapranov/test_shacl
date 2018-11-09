@@ -778,6 +778,393 @@ iex> queries_from_shape(shape, shape_query_helper) \
 
 Well, that looks better.
 
+##  Transform result sets to RDF graph
+
+One thing we haven't really discussed yet is how to transform from the
+`SPARQL.Query.Result` struct resulting from a `select` query to an
+`RDF.Graph` which would result from a `construct` query.
+
+The `to_graph/4` function shown here is cribbed from
+`SPARQL.Query.Result.get/1` and extends the function signature from one
+variable to three variables for an RDF triple. It just selects for three
+named fields (the variables named as arguments) from each map in the list
+and wraps those up as a regular tuple (the RDF triple) with the
+`RDF.triple/3` function. The resulting list of triples is then returned
+as an `RDF.Graph` using the `RDF.graph/1` function.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  @query """
+  select *
+  where {
+    ?s ?p ?o
+  }
+  """
+
+  # ...
+
+  @doc """
+  Queries default RDF model with default SPARQL query.
+  """
+  def query do
+    query(@query)
+  end
+
+  @doc """
+  Queries default RDF model with user SPARQL query.
+  """
+  def query(query) do
+    qr = Turtle.read_file!(@data_dir <> @data_file)
+    qr |> SPARQL.execute_query(query)
+  end
+
+  @doc """
+  Queries a user RDF model with a user SPARQL query.
+  """
+  def query(graph, query) do
+    SPARQL.execute_query(graph, query)
+  end
+
+  # ...
+
+  @doc """
+  Transforms a SPARQL.Query.Result struct into an RDF graph.
+  """
+  def to_graph(%SPARQL.Query.Result{results: results, variables: variables},
+               variable1, variable2, variable3) do
+    if variable1 in variables
+      and variable2 in variables
+      and variable3 in variables
+    do
+      triples =
+        Enum.map results,
+          fn r ->
+            RDF.triple(r[variable1], r[variable2], r[variable3])
+          end
+      RDF.graph(triples)
+    end
+  end
+end
+```
+
+And for convenience we also support passing the variables as atoms
+instead of strings.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  ## Transform function from results table to graph
+
+  @doc """
+  Helper function clause for converting atom args to strings.
+  """
+  def to_graph(result, variable1, variable2, variable3)
+      when is_atom(variable1) and is_atom(variable2) and is_atom(variable3),
+    do: to_graph(result, to_string(variable1), to_string(variable2), to_string(variable3))
+  end
+
+  # ...
+end
+```
+So let's try with our default query (running against the default RDF
+description) which simply makes a `select` over all our `?s`, `?p`, and
+`?o` variables.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  alias RDF.Turtle
+  alias SPARQL.Query.Result
+
+  @priv_dir "#{:code.priv_dir(:test_shacl)}"
+
+  @data_dir @priv_dir <> "/data/"
+  @data_file "978-1-68050-252-7.ttl"
+
+  @shapes_dir @priv_dir <> "/shapes/"
+  @shape_file "book_shape.ttl"
+
+  @shapes_queries_dir @priv_dir <> "/shapes/queries/"
+  @shape_query_file "book_shape_query.rq"
+  @shape_query_helper_file "book_shape_query_helper.rq"
+
+  @query """
+  select *
+  where {
+    ?s ?p ?o
+  }
+  """
+
+  @doc """
+  Reads default RDF model in Turtle format.
+  """
+  def data do
+    Turtle.read_file!(@data_dir <> @data_file)
+  end
+
+  @doc """
+  Reads default RDF shape in Turtle format.
+  """
+  def shape do
+    Turtle.read_file!(@shapes_dir <> @shape_file)
+  end
+
+  @doc """
+  Reads default SPARQL query for default RDF shape.
+  """
+  def shape_query do
+    File.read!(@shapes_queries_dir <> @shape_query_file)
+  end
+
+  @doc """
+  Reads simple SPARQL query for default RDF shape.
+  """
+  def shape_query_helper do
+    File.read!(@shapes_queries_dir <> @shape_query_helper_file)
+  end
+
+  @doc """
+  Queries default RDF model with default SPARQL query.
+  """
+  def query do
+    query(@query)
+  end
+
+  @doc """
+  Queries default RDF model with user SPARQL query.
+  """
+  def query(query) do
+    qr = Turtle.read_file!(@data_dir <> @data_file)
+    qr |> SPARQL.execute_query(query)
+  end
+
+  @doc """
+  Queries a user RDF model with a user SPARQL query.
+  """
+  def query(graph, query) do
+    SPARQL.execute_query(graph, query)
+  end
+
+  @doc """
+  Makes a SPARQL query by querying default RDF shape - demo only.
+  """
+  def query_from_shape(shape, shape_query) do
+    qh = "select ?s ?p ?o\nwhere {\n"
+    qt = "}\n"
+
+    result = SPARQL.execute_query(shape, shape_query)
+
+    s = result |> Result.get(:s) |> List.first
+    q = qh <> "  ?s a <#{s}> .\n"
+
+    q = q <> List.to_string(
+      result
+      |> Result.get(:p)
+      |> Enum.map(&("  ?s <#{&1}> ?o .\n  ?s ?p ?o .\n"))
+    )
+    q <> qt
+  end
+
+  @doc """
+  Makes a list of SPARQL queries by querying default RDF shape.
+  """
+  def queries_from_shape(shape, shape_query) do
+    qh = "select ?s ?p ?o\nwhere {\n"
+    qt = "}\n"
+
+    result = SPARQL.execute_query(shape, shape_query)
+
+    s = result |> Result.get(:s) |> List.first
+
+    (result |> Result.get(:p))
+    |> Enum.map(
+      &(qh
+        <> "  # bind (<#{&1}> as ?p)\n"
+        <> "  ?s a <#{s}> .\n"
+        <> "  ?s <#{&1}> ?o .\n"
+        <> " ?s ?p ?o .\n"
+        <> qt
+      )
+    )
+  end
+
+  @doc """
+  Helper function clause for converting atom args to strings.
+  """
+  def to_graph(result, variable1, variable2, variable3)
+      when is_atom(variable1) and is_atom(variable2) and is_atom(variable3),
+    do: to_graph(result, to_string(variable1), to_string(variable2), to_string(variable3))
+
+  @doc """
+  Transforms a SPARQL.Query.Result struct into an RDF graph.
+  """
+  def to_graph(%SPARQL.Query.Result{results: results, variables: variables},
+               variable1, variable2, variable3) do
+    if variable1 in variables
+      and variable2 in variables
+      and variable3 in variables
+    do
+      triples =
+        Enum.map results,
+          fn r ->
+            RDF.triple(r[variable1], r[variable2], r[variable3])
+          end
+      RDF.graph(triples)
+    end
+  end
+end
+```
+
+```bash
+bash> make all
+
+iex> query
+#=> %SPARQL.Query.Result{
+      results: [
+        %{
+          "o" => ~I<https://twitter.com/bgmarx>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/creator>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<https://twitter.com/josevalim>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/creator>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<https://twitter.com/redrapids>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/creator>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => %RDF.Literal{value: ~D[2018-03-14],
+            datatype: ~I<http://www.w3.org/2001/XMLSchema#date>},
+          "p" => ~I<http://purl.org/dc/elements/1.1/date>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~L"Paper",
+          "p" => ~I<http://purl.org/dc/elements/1.1/format>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<https://pragprog.com/>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/publisher>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~L"Adopting Elixir"en,
+          "p" => ~I<http://purl.org/dc/elements/1.1/title>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<http://purl.org/ontology/bibo/Book>,
+          "p" => ~I<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        }
+      ],
+      variables: ["s", "p", "o"]
+    }
+
+iex> query |> to_graph(:s, :p, :o)
+#=> #RDF.Graph{name: nil
+        ~I<urn:isbn:978-1-68050-252-7>
+          ~I<http://purl.org/dc/elements/1.1/creator>
+            ~I<https://twitter.com/bgmarx>
+            ~I<https://twitter.com/josevalim>
+            ~I<https://twitter.com/redrapids>
+        ~I<http://purl.org/dc/elements/1.1/date>
+          %RDF.Literal{value: ~D[2018-03-14],
+            datatype: ~I<http://www.w3.org/2001/XMLSchema#date>}
+        ~I<http://purl.org/dc/elements/1.1/format>
+          ~L"Paper"
+        ~I<http://purl.org/dc/elements/1.1/publisher>
+          ~I<https://pragprog.com/>
+        ~I<http://purl.org/dc/elements/1.1/title>
+          ~L"Adopting Elixir"en
+        ~I<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+          ~I<http://purl.org/ontology/bibo/Book>}
+```
+
+And let's try this now on our `queries_from_shape/2` function:
+
+```bash
+iex> queries_from_shape(shape, shape_query_helper) \
+     |> Enum.map(&query/1) \
+     |> Enum.map(&(to_graph(&1, :s, :p, :o)))
+#=> [
+      #RDF.Graph{name: nil
+        ~I<urn:isbn:978-1-68050-252-7>
+          ~I<http://purl.org/dc/elements/1.1/creator>
+            ~I<https://twitter.com/bgmarx>
+            ~I<https://twitter.com/josevalim>
+            ~I<https://twitter.com/redrapids>},
+      #RDF.Graph{name: nil
+        ~I<urn:isbn:978-1-68050-252-7>
+          ~I<http://purl.org/dc/elements/1.1/date>
+            %RDF.Literal{value: ~D[2018-03-14],
+              datatype: ~I<http://www.w3.org/2001/XMLSchema#date>}},
+      #RDF.Graph{name: nil
+        ~I<urn:isbn:978-1-68050-252-7>
+          ~I<http://purl.org/dc/elements/1.1/title>
+            ~L"Adopting Elixir"en}
+    ]
+```
+
+Just one thing left – to merge those graphs. And using the IEx helper
+`v()` to recall the last value from the IEx history. We use the
+`RDF.Graph.add/2` function within `List.foldl/3` to aggregate the graphs
+via an accumulator supplied by `RDF.Graph.new/0`.
+
+```bash
+iex> v() |> List.foldl(RDF.Graph.new, fn g1, g2 ->
+       RDF.Graph.add(g1, g2) end)
+#=> #RDF.Graph{name: nil
+      ~I<urn:isbn:978-1-68050-252-7>
+        ~I<http://purl.org/dc/elements/1.1/creator>
+          ~I<https://twitter.com/bgmarx>
+          ~I<https://twitter.com/josevalim>
+          ~I<https://twitter.com/redrapids>
+        ~I<http://purl.org/dc/elements/1.1/date>
+          %RDF.Literal{value: ~D[2018-03-14],
+            datatype: ~I<http://www.w3.org/2001/XMLSchema#date>}
+        ~I<http://purl.org/dc/elements/1.1/title>
+          ~L"Adopting Elixir"en}
+```
+Or, more meaningfully as a Turtle string, and again using the `v()`
+helper.
+
+```bash
+iex> v() |> RDF.Turtle.write_string! |> IO.puts
+#=> <urn:isbn:978-1-68050-252-7>
+      <http://purl.org/dc/elements/1.1/creator> <https://twitter.com/bgmarx>,
+        <https://twitter.com/josevalim>, <https://twitter.com/redrapids> ;
+      <http://purl.org/dc/elements/1.1/date> "2018-03-14"^^<http://www.w3.org/2001/XMLSchema#date> ;
+      <http://purl.org/dc/elements/1.1/title> "Adopting Elixir"@en .
+    :ok
+```
+
+So, that graph is retrieved from the RDF data using our RDF shape to
+filter out properties (or rather, to select for only those properties we
+actually want).
+
 ### 8 Novem8er 2018 by Oleg G.Kapranov
 
 [1]: http://graphdb.ontotext.com/
