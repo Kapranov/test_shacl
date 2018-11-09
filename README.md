@@ -317,6 +317,8 @@ defmodule TestSHACL do
   @shapes_dir @priv_dir <> "/shapes/"
   @shape_file "book_shape.ttl"
 
+  ## Data access functions for graphs
+
   # ...
 
   @doc """
@@ -387,4 +389,74 @@ descriptions for things which are restricted to the property list
 specified in the RDF shape. In our case here we're looking for instances
 of a book class (specifically a `bibo:Book`).
 
+We'll also define a convenience function `shape_query/0` to read this
+query.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  ## Data access functions for queries
+
+  @shapes_queries_dir @priv_dir <> "/shapes/queries/"
+  @shape_query_file "book_shape_query.rq"
+
+  @doc """
+  Reads default SPARQL query for default RDF shape.
+  """
+  def shape_query do
+    File.read!(@shapes_queries_dir <> @shape_query_file)
+  end
+end
+```
+
+Now, we can verify this query by running against a local triplestore.
+Here I'm using GraphDB Free edition (version 8.7.2 Debian based Linux) from Ontotext with a
+new repo `shape-test` which just includes the `data` and the `shape`
+graphs. (In a production system we would typically use named graphs to
+organize the data but here it is not necessary.)
+
+Setup GraphDB in Debian based Linux:
+
+```bash
+bash> sudo dpkg -i graphdb-free-8.7.2.deb
+bash> env | grep PATH
+bash> cat >> .bashrc
+export PATH="/opt/GraphDBFree:$PATH"
+
+bash> $BASH
+bash> GraphDBFree
+```
+
+and then open web brouser on some url: `http://localhost:7200/`
+
+1. create repository
+
+![graphdb](/screenshots1.png "create repository")
+
+2. uploaded RDF files - `book_shape.ttl`
+
+![graphdb](/screenshots2.png "upload files")
+
+3. SPARQL - query
+
+![graphdb](/screenshots3.png "sparql query")
+
+It works!
+
+We have just those properties we defined in the RDF shape, and not those
+we commented.
+
+
 ### 8 Novem8er 2018 by Oleg G.Kapranov
+
+[1]: http://graphdb.ontotext.com/
+[2]: https://www.ontotext.com/thank-you-graphdb-free/
+[3]: http://graphdb.ontotext.com/documentation/free/quick-start-guide.html
+[4]: https://github.com/tonyhammond/examples/tree/master/test_shacl
+[5]: https://medium.com/@tonyhammond/working-with-shacl-and-elixir-4719473d43c1

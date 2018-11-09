@@ -13,6 +13,9 @@ defmodule TestSHACL do
   @shapes_dir @priv_dir <> "/shapes/"
   @shape_file "book_shape.ttl"
 
+  @shapes_queries_dir @priv_dir <> "/shapes/queries/"
+  @shape_query_file "book_shape_query.rq"
+
   @doc """
   Reads default RDF model in Turtle format.
   """
@@ -25,5 +28,12 @@ defmodule TestSHACL do
   """
   def shape do
     Turtle.read_file!(@shapes_dir <> @shape_file)
+  end
+
+  @doc """
+  Reads default SPARQL query for default RDF shape.
+  """
+  def shape_query do
+    File.read!(@shapes_queries_dir <> @shape_query_file)
   end
 end
