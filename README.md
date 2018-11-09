@@ -452,6 +452,126 @@ It works!
 We have just those properties we defined in the RDF shape, and not those
 we commented.
 
+## Query in-memory RDF models
+
+So let's try now to emulate this with `SPARQL.ex`, not with standing any
+known limitations.
+
+First let's replicate the repo `shape_test` by using the
+`RDF.Graph.add/2` function to merge the two graphs `data` and `shape`:
+
+```bash
+bash> make all
+iex> shape_test = RDF.Graph.add(data, shape)
+#=> #RDF.Graph{name: nil
+        ~B<b0>
+          ~I<http://www.w3.org/ns/shacl#path>
+            ~I<http://purl.org/dc/elements/1.1/creator>
+        ~B<b1>
+          ~I<http://www.w3.org/ns/shacl#path>
+            ~I<http://purl.org/dc/elements/1.1/date>
+        ~B<b2>
+          ~I<http://www.w3.org/ns/shacl#path>
+            ~I<http://purl.org/dc/elements/1.1/title>
+        ~I<http://example.org/shapes/Book>
+          ~I<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+            ~I<http://www.w3.org/ns/shacl#NodeShape>
+          ~I<http://www.w3.org/2000/01/rdf-schema#label>
+            ~L"SHACL shape for the bibo:Book model"
+          ~I<http://www.w3.org/ns/shacl#closed>
+            %RDF.Literal{value: true,
+              datatype: ~I<http://www.w3.org/2001/XMLSchema#boolean>}
+          ~I<http://www.w3.org/ns/shacl#property>
+            ~B<b0>
+            ~B<b1>
+            ~B<b2>
+          ~I<http://www.w3.org/ns/shacl#targetClass>
+            ~I<http://purl.org/ontology/bibo/Book>
+        ~I<urn:isbn:978-1-68050-252-7>
+          ~I<http://purl.org/dc/elements/1.1/creator>
+            ~I<https://twitter.com/bgmarx>
+            ~I<https://twitter.com/josevalim>
+            ~I<https://twitter.com/redrapids>
+          ~I<http://purl.org/dc/elements/1.1/date>
+            %RDF.Literal{value: ~D[2018-03-14],
+              datatype: ~I<http://www.w3.org/2001/XMLSchema#date>}
+          ~I<http://purl.org/dc/elements/1.1/format>
+            ~L"Paper"
+          ~I<http://purl.org/dc/elements/1.1/publisher>
+            ~I<https://pragprog.com/>
+          ~I<http://purl.org/dc/elements/1.1/title>
+            ~L"Adopting Elixir"en
+          ~I<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>
+            ~I<http://purl.org/ontology/bibo/Book>}
+```
+
+And note that this RDF.Graph serialization also shows blank nodes marked
+with the `~B` sigil, alongside the IRIs marked with the `-I` sigil, and
+literals marked with the the `~L` sigil.
+
+Now if we try and run our query against this we get this:
+
+```bash
+iex> SPARQL.execute_query(shape_test, shape_query)
+#=> %SPARQL.Query.Result{
+      results: [
+        %{
+          "o" => ~I<https://twitter.com/bgmarx>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/creator>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<https://twitter.com/josevalim>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/creator>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<https://twitter.com/redrapids>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/creator>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          o" => %RDF.Literal{value: ~D[2018-03-14],
+                  datatype: ~I<http://www.w3.org/2001/XMLSchema#date>},
+          "p" => ~I<http://purl.org/dc/elements/1.1/date>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~L"Paper",
+          "p" => ~I<http://purl.org/dc/elements/1.1/format>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<https://pragprog.com/>,
+          "p" => ~I<http://purl.org/dc/elements/1.1/publisher>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~L"Adopting Elixir"en,
+          "p" => ~I<http://purl.org/dc/elements/1.1/title>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        },
+        %{
+          "o" => ~I<http://purl.org/ontology/bibo/Book>,
+          "p" => ~I<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>,
+          "s" => ~I<urn:isbn:978-1-68050-252-7>
+        }
+      ],
+      variables: ["s", "p", "o"]
+    }
+```
+
+Well, this is a little surprising. We're getting a `SPARQL.Query.Result`
+struct which we'd expect from a `select` query – not from a `construct`
+query. Also we're getting all of the properties from our `data` graph
+returned, so it looks as though our inner query using the `shape` graph
+has been ignored.
+
+And if we check the documentation for `SPARQL.ex` we see that indeed a
+whole bunch of things are still on the to-do list, among them `construct`
+and inner queries. (Which is fair enough – it takes time to implement a
+complete spec and SPARQL is one of the larger suites of specifications
+from the W3C.)
 
 ### 8 Novem8er 2018 by Oleg G.Kapranov
 
