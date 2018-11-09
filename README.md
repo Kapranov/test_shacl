@@ -573,6 +573,211 @@ and inner queries. (Which is fair enough – it takes time to implement a
 complete spec and SPARQL is one of the larger suites of specifications
 from the W3C.)
 
+**Build a query for an RDF shape**
+
+So, let's try and reimagine our approach. We'll ditch the inner query
+and build the `shape_query` using a function instead.
+
+For this we'll make use of a simpler `book_shape_query_helper.rq` query
+and we'll aim to just make a select of the properties `?p` for a given
+subject `?s`.
+
+Now we would like to set the `sh:targetClass` to a given class
+(`bibo:Book`) via the bound variable `?s` as a way of generalizing, but
+since `SPARQL.ex` does not support the `bind` keyword we will make do in
+this example by setting `sh:targetClass` to the unbound variable `?s`
+and also to the given class.
+
+```
+# priv/shapes/queries/book_shape_query_helper.rq
+@prefix bibo: <http://purl.org/ontology/bibo/> .
+@prefix dc: <http://purl.org/dc/elements/1.1/> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+@prefix shapes: <http://example.org/shapes/> .
+
+select distinct ?s ?p
+where {
+  # bind (bibo:Book as ?s)
+  ?shape sh:targetClass bibo:Book .
+  ?shape sh:targetClass ?s .
+  ?shape sh:property [ sh:path ?p ] .
+}
+```
+And again we define a convenience function `shape_query_helper/0` to
+read this query.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  @shapes_queries_dir @priv_dir <> "/shapes/queries/"
+  @shape_query_helper_file "book_shape_query_helper.rq"
+
+  # ...
+
+  @doc """
+  Reads simple SPARQL query for default RDF shape.
+  """
+  def shape_query_helper do
+    File.read!(@shapes_queries_dir <> @shape_query_helper_file)
+  end
+end
+```
+
+So we can now provide a very basic query builder `query_from_shape/2`
+which applies a `shape_query` to the `shape`.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  @doc """
+  Makes a SPARQL query by querying default RDF shape - demo only.
+  """
+  def query_from_shape(shape, shape_query) do
+    qh = "select ?s ?p ?o\nwhere {\n"
+    qt = "}\n"
+
+    result = SPARQL.execute_query(shape, shape_query)
+
+    # add the subject type
+    s = result |> SPARQL.Query.Result.get(:s) |> List.first
+    q = qh <> "  ?s a <#{s}> .\n"
+
+    # add the properties
+    q = q <> List.to_string(
+      result
+      |> SPARQL.Query.Result.get(:p)
+      |> Enum.map(&("  ?s <#{&1}> ?o .\n  ?s ?p ?o .\n"))
+    )
+    q <> qt
+  end
+end
+```
+
+Now we would like to set the property in the triple pattern to be the
+variable `?p` bound to the actual property, but since `SPARQL.ex`
+does not support the `bind` keyword we will make do by using two triple
+patterns –  one with the actual property and one with the variable `?p`
+as the property. (And I should point out that this is an unashamed hack
+and will only work for this tutorial since we are running the query
+against a known dataset with just one RDF description.)
+
+In our case the `shape_query` argument applied will be the query from
+`shape_query_helper/0`. And running this we get:
+
+```bash
+bash> make all
+iex> query_from_shape(shape, shape_query_helper) |> IO.puts
+#=> select ?s ?p ?o
+    where {
+      ?s a <http://purl.org/ontology/bibo/Book> .
+      ?s <http://purl.org/dc/elements/1.1/creator> ?o .
+      ?s ?p ?o .
+      ?s <http://purl.org/dc/elements/1.1/date> ?o .
+      ?s ?p ?o .
+      ?s <http://purl.org/dc/elements/1.1/title> ?o .
+      ?s ?p ?o .
+    }
+    :ok
+```
+
+But this is not going to work. It would work for a single property only
+but for multiple properties can only match if this was a union over
+separate graph patterns – and `SPARQL.ex` does not currently support
+`union`. We're going to need something more radical.
+
+What we'll need to do is generate instead a list of queries – one query
+for each property. So let's try that.
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  @doc """
+  Makes a list of SPARQL queries by querying default RDF shape.
+  """
+  def queries_from_shape(shape, shape_query) do
+    qh = "select ?s ?p ?o\nwhere {\n"
+    qt = "}\n"
+
+    result = SPARQL.execute_query(shape, shape_query)
+
+    # get the subject
+    s = result |> SPARQL.Query.Result.get(:s) |> List.first
+
+    # get the properties
+    (result |> SPARQL.Query.Result.get(:p))
+    |> Enum.map(
+      &(qh
+        <> "  # bind (<#{&1}> as ?p)\n"
+        <> "  ?s a <#{s}> .\n"
+        <> "  ?s <#{&1}> ?o .\n"
+        <> " ?s ?p ?o .\n"
+        <> qt
+      )
+    )
+  end
+end
+```
+
+How does this now look? (And we’ll pipe this through `Enum.map/2` with
+`String.duplicate/2` function to add in a line separator.)
+
+```bash
+bash> make all
+iex> queries_from_shape(shape, shape_query_helper) \
+     |> Enum.map(&(String.duplicate("#",60) <> "\n" <> &1)) \
+     |> IO.puts
+#=> ############################################################
+    select ?s ?p ?o
+    where {
+      # bind (<http://purl.org/dc/elements/1.1/creator> as ?p)
+      ?s a <http://purl.org/ontology/bibo/Book> .
+      ?s <http://purl.org/dc/elements/1.1/creator> ?o .
+      ?s ?p ?o .
+    }
+    ############################################################
+    select ?s ?p ?o
+    where {
+      # bind (<http://purl.org/dc/elements/1.1/date> as ?p)
+      ?s a <http://purl.org/ontology/bibo/Book> .
+      ?s <http://purl.org/dc/elements/1.1/date> ?o .
+      ?s ?p ?o .
+    }
+    ############################################################
+    select ?s ?p ?o
+    where {
+      # bind (<http://purl.org/dc/elements/1.1/title> as ?p)
+      ?s a <http://purl.org/ontology/bibo/Book> .
+      ?s <http://purl.org/dc/elements/1.1/title> ?o .
+      ?s ?p ?o .
+    }
+
+    :ok
+```
+
+Well, that looks better.
+
 ### 8 Novem8er 2018 by Oleg G.Kapranov
 
 [1]: http://graphdb.ontotext.com/
