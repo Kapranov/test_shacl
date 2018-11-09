@@ -348,4 +348,43 @@ iex> shape |> RDF.Turtle.write_string! |> IO.puts
     :ok
 ```
 
+So, we're going to define a query for this shape in the file
+`book_shape_query.rq` which we'll add to `priv/shapes/queries/`.
+
+```
+# priv/shapes/queries/book_shape_query.rq
+prefix bibo: <http://purl.org/ontology/bibo/>
+prefix dc: <http://purl.org/dc/elements/1.1/>
+prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+prefix sh: <http://www.w3.org/ns/shacl#>
+prefix xsd: <http://www.w3.org/2001/XMLSchema#>
+
+prefix shapes: <http://example.org/shapes/>
+
+construct {
+  ?s ?p ?o
+}
+where {
+  {
+    select distinct ?p
+    where {
+      ?shape sh:targetClass bibo:Book .
+      ?shape sh:property [ sh:path ?p ] .
+    }
+  }
+  ?s a bibo:Book .
+  ?s ?p ?o .
+}
+```
+
+The query pattern here is to use an inner query (a `select` query)
+against an RDF shape to get a list of allowed properties for a given
+class (identified by the `sh:targetClass`) and to use that to drive a
+`construct` query which matches instances of that class and decorates
+them with the allowed properties. Basically we're retrieving RDF
+descriptions for things which are restricted to the property list
+specified in the RDF shape. In our case here we're looking for instances
+of a book class (specifically a `bibo:Book`).
+
 ### 8 Novem8er 2018 by Oleg G.Kapranov
