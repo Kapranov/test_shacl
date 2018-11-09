@@ -1165,6 +1165,192 @@ So, that graph is retrieved from the RDF data using our RDF shape to
 filter out properties (or rather, to select for only those properties we
 actually want).
 
+## Query remote RDF models
+
+So, in order to reuse the same data and shape graph let's use the same
+GraphDB repository we loaded earlier and query remotely against that.
+The endpoint for GraphDB will therefore be:
+
+```elixir
+# lib/test_shacl/client.ex
+defmodule TestSHACL.Client do
+  @moduledoc """
+  This module provides test functions for the SPARQL.Client module.
+  """
+
+  @service "http://localhost:7200/repositories/shape-test"
+end
+```
+We add that to the `TestSHACL.Client` module along with an accessor
+function.
+
+```elixir
+# lib/test_shacl/client.ex
+defmodule TestSHACL.Client do
+  @moduledoc """
+  This module provides test functions for the SPARQL.Client module.
+  """
+
+  @service "http://localhost:7200/repositories/shape-test"
+
+  @query """
+  select *
+  where {
+    ?s ?p ?o
+  }
+  """
+
+  def get_service, do: @service
+
+  @doc """
+  Queries default RDF service with default SPARQL query.
+  """
+  def rquery do
+    SPARQL.Client.query(@query, @service)
+  end
+
+  @doc """
+  Queries default RDF service with user SPARQL query.
+  """
+  def rquery(query) do
+    SPARQL.Client.query(query, @service)
+  end
+
+  @doc """
+  Queries a user RDF service with a user SPARQL query.
+  """
+  def rquery(query, service) do
+    SPARQL.Client.query(query, service)
+  end
+end
+```
+
+And using the `rquery/2` convenience function we defined in the previous
+project (which we earlier copied to `TestSHACL.Client`), and the
+`get_service` accessor function we can now query this GraphDB
+repository.
+
+Oh, an error.
+
+```bash
+bash> make all
+iex> rquery(shape_query, get_service)
+#=> {:error,
+    %Tesla.Env{
+      __client__: %Tesla.Client{
+        fun: nil,
+        post: [],
+        pre: [
+          {Tesla.Middleware.Headers, :call,
+            [
+              [
+                {"Accept",
+                 "text/turtle, application/n-triples,
+                   application/n-quads, application/ld+json,
+                   */*;p=0.1"},
+                {"Content-Type", "application/x-www-form-urlencoded"}
+              ]
+            ]},
+          {Tesla.Middleware.FollowRedirects, :call, [[max_redirects:5]]}
+        ]
+      },
+      __module__: SPARQL.Client,
+      body: "MALFORMED QUERY: Multiple prefix declarations for prefix 'rdf'",
+      headers: [
+        {"vary", "Accept-Encoding"},
+        {"cache-control", "no-store"},
+        {"content-type", "text/plain;charset=UTF-8"},
+        {"content-language", "en-GB"},
+        {"content-length", "62"},
+        {"date", "Thu, 11 Oct 2018 13:15:09 GMT"},
+        {"connection", "close"},
+        {"server", "GraphDB-Free/8.5.0 RDF4J/2.2.4"}
+      ],
+      method: :post,
+      opts: [],
+      query: [],
+      status: 400,
+      url: "http://localhost:7200/repositories/shape-test"
+    }}
+```
+Turns out that GraphDB is complaining about the `rdf` prefix
+declaration. So, we comment that out of the query, and retry. Same thing
+for `rdfs` and for `xsd` prefix declarations. So finally, we get this:
+
+```bash
+iex> rquery(shape_query, get_service)
+#=> {:ok, #RDF.Graph{name: nil
+          ~I<urn:isbn:978-1-68050-252-7>
+            ~I<http://purl.org/dc/elements/1.1/creator>
+              ~I<https://twitter.com/bgmarx>
+              ~I<https://twitter.com/josevalim>
+              ~I<https://twitter.com/redrapids>
+            ~I<http://purl.org/dc/elements/1.1/date>
+              %RDF.Literal{value: ~D[2018-03-14],
+                datatype: ~I<http://www.w3.org/2001/XMLSchema#date>}
+            ~I<http://purl.org/dc/elements/1.1/title>
+              ~L"Adopting Elixir"en}}
+```
+
+So, let's capture that in the variable `graph` by matching on that last
+tuple returned using the `v()` helper.
+
+```bash
+iex> {:ok, graph} = v()
+#=> {:ok, #RDF.Graph{name: nil
+          ~I<urn:isbn:978-1-68050-252-7>
+            ~I<http://purl.org/dc/elements/1.1/creator>
+              ~I<https://twitter.com/bgmarx>
+              ~I<https://twitter.com/josevalim>
+              ~I<https://twitter.com/redrapids>
+            ~I<http://purl.org/dc/elements/1.1/date>
+              %RDF.Literal{value: ~D[2018-03-14],
+                ~I<http://www.w3.org/2001/XMLSchema#date>}
+            ~I<http://purl.org/dc/elements/1.1/title>
+              ~L"Adopting Elixir"en}}
+```
+
+And using the RDF convenience string writer for Turtle we get this.
+
+```bash
+iex> graph |> RDF.Turtle.write_string! |> IO.puts
+#=> <urn:isbn:978-1-68050-252-7>
+        <http://purl.org/dc/elements/1.1/creator> <https://twitter.com/bgmarx>,
+          <https://twitter.com/josevalim>, <https://twitter.com/redrapids> ;
+        <http://purl.org/dc/elements/1.1/date>
+          "2018-03-14"^^<http://www.w3.org/2001/XMLSchema#date> ;
+        <http://purl.org/dc/elements/1.1/title> "Adopting Elixir"@en .
+    :ok
+```
+
+Done!
+
+We again have our RDF description with only those properties that were
+explicitly defined in the RDF shape.
+
+I’ve shown here in this project how the `SPARQL.ex` and
+`SPARQL.Client.ex` packages can be used together with RDF shapes for
+querying RDF datastores.
+
+Specifically we've used `SPARQL.ex` to build up dynamically a set of
+SPARQL queries by querying an RDF shape and have used these to query a
+local (in memory) RDF model. We have shown how the result sets can be
+transformed into an RDF graph.
+
+We have also used `SPARQL.Client.ex` to query against an RDF shape using
+a stored query. The RDF datastore in this case was hosted on a local
+machine with Ontotext GraphDB but was queried remotely via its SPARQL
+endpoint.
+
+While the local querying shows up some current limitations in `SPARQL.ex`
+we are also able to find some workarounds, e.g. transforming result sets
+into RDF graphs.
+
+Again, the real reasons for an interest in Elixir for semantic
+applications is not so much in basic query mechanics but in its
+exemplary support for fault tolerant and distributed computing which I
+hope to address in a subsequent.
+
 ### 8 Novem8er 2018 by Oleg G.Kapranov
 
 [1]: http://graphdb.ontotext.com/
