@@ -301,5 +301,51 @@ shapes:Book
     .
 ```
 
+We can define a simple `shape/0` function to retrieve the shape from
+the file `book_shape.ttl` which we'll add to `priv/shapes/`.
 
-### 8 November 2018 by Oleg G.Kapranov
+
+```elixir
+# lib/test_shacl.ex
+defmodule TestSHACL do
+  @moduledoc """
+  Top-level module used in "Working with SHACL and Elixir"
+  """
+
+  # ...
+
+  @shapes_dir @priv_dir <> "/shapes/"
+  @shape_file "book_shape.ttl"
+
+  # ...
+
+  @doc """
+  Reads default RDF shape in Turtle format.
+  """
+  def shape do
+    RDF.Turtle.read_file!(@shapes_dir <> @shape_file)
+  end
+end
+```
+
+And again let's try that.
+
+```bash
+bash> make all
+iex> shape |> RDF.Turtle.write_string! |> IO.puts
+#=> <http://example.org/shapes/Book>
+        a <http://www.w3.org/ns/shacl#NodeShape> ;
+        <http://www.w3.org/2000/01/rdf-schema#label> "SHACL shape for the bibo:Book model" ;
+        <http://www.w3.org/ns/shacl#closed> true ;
+        <http://www.w3.org/ns/shacl#property> [
+            <http://www.w3.org/ns/shacl#path> <http://purl.org/dc/elements/1.1/creator>
+        ], [
+            <http://www.w3.org/ns/shacl#path> <http://purl.org/dc/elements/1.1/date>
+        ], [
+            <http://www.w3.org/ns/shacl#path> <http://purl.org/dc/elements/1.1/title>
+        ] ;
+        <http://www.w3.org/ns/shacl#targetClass> <http://purl.org/ontology/bibo/Book> .
+    :ok
+```
+
+### 8 Novem8er 2018 by Oleg G.Kapranov
