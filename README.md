@@ -912,6 +912,8 @@ defmodule TestSHACL do
   }
   """
 
+  ## Data access functions for graphs
+
   @doc """
   Reads default RDF model in Turtle format.
   """
@@ -926,6 +928,8 @@ defmodule TestSHACL do
     Turtle.read_file!(@shapes_dir <> @shape_file)
   end
 
+  ## Data access functions for queries
+
   @doc """
   Reads default SPARQL query for default RDF shape.
   """
@@ -939,6 +943,8 @@ defmodule TestSHACL do
   def shape_query_helper do
     File.read!(@shapes_queries_dir <> @shape_query_helper_file)
   end
+
+  ## Simple query functions for testing
 
   @doc """
   Queries default RDF model with default SPARQL query.
@@ -962,6 +968,8 @@ defmodule TestSHACL do
     SPARQL.execute_query(graph, query)
   end
 
+  ## Query builder
+
   @doc """
   Makes a SPARQL query by querying default RDF shape - demo only.
   """
@@ -984,6 +992,13 @@ defmodule TestSHACL do
 
   @doc """
   Makes a list of SPARQL queries by querying default RDF shape.
+
+  ## Examples
+
+  iex> queries_from_shape(shape, shape_query)
+  ...> |> Enum.map(&query/1)
+  ...> |> Enum.map(&(to_graph(&1, :s, :p, :o))
+  ...> |> List.foldl(RDF.Graph.new, fn g1, g2 -> RDF.Graph.add(g1, g2) end)
   """
   def queries_from_shape(shape, shape_query) do
     qh = "select ?s ?p ?o\nwhere {\n"
@@ -1004,6 +1019,8 @@ defmodule TestSHACL do
       )
     )
   end
+
+  ## Transform function from results table to graph
 
   @doc """
   Helper function clause for converting atom args to strings.
@@ -1200,7 +1217,11 @@ defmodule TestSHACL.Client do
   }
   """
 
+  ## Accessor for module attribute
+
   def get_service, do: @service
+
+  ## Simple remote query functions
 
   @doc """
   Queries default RDF service with default SPARQL query.
